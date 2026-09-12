@@ -16,5 +16,10 @@ spec:
       - name: backend
         image: devops-eks-project-backend:latest
         imagePullPolicy: Never
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        - secretRef:
+            name: backend-secret
         ports:
         - containerPort: 5000
