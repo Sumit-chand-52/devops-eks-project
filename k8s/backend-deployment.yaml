@@ -14,8 +14,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: devops-eks-project-backend:latest
-        imagePullPolicy: Never
+        image: 909726553928.dkr.ecr.ap-northeast-1.amazonaws.com/devops-project-backend:latest
         envFrom:
         - configMapRef:
             name: backend-config
