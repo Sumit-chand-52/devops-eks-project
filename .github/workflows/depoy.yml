@@ -1,0 +1,60 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "terraform/**"
+      - "**.md"
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-northeast-1
+  CLUSTER_NAME: devops-project
+  BACKEND_REPO: devops-project-backend
+  FRONTEND_REPO: devops-project-frontend
+
+permissions:
+  id-token: write   # needed for OIDC
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push images
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/$BACKEND_REPO:$TAG ./backend
+          docker build -t $REGISTRY/$FRONTEND_REPO:$TAG ./frontend
+          docker push $REGISTRY/$BACKEND_REPO:$TAG
+          docker push $REGISTRY/$FRONTEND_REPO:$TAG
+
+      - name: Connect kubectl to EKS
+        run: aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
+
+      - name: Deploy to EKS
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ github.sha }}
+        run: |
+          kubectl apply -f k8s/
+          kubectl set image deployment/backend backend=$REGISTRY/$BACKEND_REPO:$TAG
+          kubectl set image deployment/frontend frontend=$REGISTRY/$FRONTEND_REPO:$TAG
+          kubectl rollout status deployment/backend --timeout=180s
+          kubectl rollout status deployment/frontend --timeout=180s
